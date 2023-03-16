@@ -8,6 +8,9 @@ const PROJECT_ID = 0;
 const chainInfo = {
   4002: {
     name: "Fantom Testnet",
+    symbol: "FTM",
+    minRate: 0.35,
+    priceApiUrl: "",
     contractAddress: "0xfb0F0069D94a491A2a312DDAdc717d9bbC1a5a98", // paymentSplitter2 smart contract address
     paymentTokens: {
       "testcoin":  {
@@ -27,8 +30,6 @@ const chainInfo = {
 }
 
 const contractChainId = 4002;
-
-// TODO: use chainInfo
 
 // TODO: check supported chain
 
@@ -70,26 +71,27 @@ async function getTokenContract(tokenAddress) {
   return new web3.eth.Contract(ERC20_ABI, tokenAddress);
 }
 
-async function pay() { // todo: rename to pay, add also approve function for erc20
+async function pay() {
   showOrHideError();
   try {
     let BN = web3.utils.toBN;
     let selectedCoin = $('input[name="coin"]:checked').val();
     console.log('Selected coin:', selectedCoin);
-    let quantity = $("#quantity").val();
-
-    // console.log('Check Metamask... (do not press the button again!)');
 
     let paymentResult;
     if (selectedCoin == 'native') {
-      let price = $("#price").val(); // TODO: convert USD price from global config, fetch price from api and convert usd to token
-      // https://web3js.readthedocs.io/en/v1.2.11/web3-utils.html#towei
-      let priceInWei = BN(web3.utils.toWei(price.toString()));
-      let totalValue = priceInWei.mul(BN(quantity.toString()));
-      console.log('Total Value:', totalValue.toString(), 'Human friendly:', web3.utils.fromWei(totalValue.toString()));
+      let symbol = chainInfo[contractChainId].symbol;
+      let subtotal = $("#subtotal").val(); // TODO: convert USD price from global config, fetch price from api and convert usd to token
+      let rate = 0.35 * 1e18; // TODO: fetch this via api or use a default/minimum rate
+      let totalWei = BN(subtotal.toString()).mul(BN(rate.toString()));
+      // let totalWei = BN(web3.utils.toWei(totalNative.toString())); // https://web3js.readthedocs.io/en/v1.2.11/web3-utils.html#towei
+      let humanFriendlyAmount = web3.utils.fromWei(totalWei.toString());
+      console.log('Total Value:', totalWei.toString(), 'Human friendly:', humanFriendlyAmount);
+
+      $('#preview').html(`To pay: ${humanFriendlyAmount} ${symbol}`).show();
   
       let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
-      let hasEnoughBalance = await handleLowBalance(web3, selectedAccount, totalValue, lowBalanceMessage);
+      let hasEnoughBalance = await handleLowBalance(web3, selectedAccount, totalWei, lowBalanceMessage);
       if (!hasEnoughBalance) {
         return;
       }
@@ -98,7 +100,7 @@ async function pay() { // todo: rename to pay, add also approve function for erc
 
       interactionInProgress();
 
-      paymentResult = await contract.methods.splitPayment(PROJECT_ID).send({ from: selectedAccount, value: totalValue });
+      paymentResult = await contract.methods.splitPayment(PROJECT_ID).send({ from: selectedAccount, value: totalWei });
       if (!paymentResult) {
         console.log(`Payment error`);
       }
@@ -112,12 +114,17 @@ async function pay() { // todo: rename to pay, add also approve function for erc
       const tokenAddress = coinInfo.address;
       const tokenDecimals = coinInfo.decimals;
       const tokenContract = await getTokenContract(tokenAddress);
+      let symbol = coinInfo.symbol;
+      let multiplier = 10**tokenDecimals;
 
-      let price = $("#price").val(); // TODO: convert USD price from global config, fetch price from api and convert usd to token
+      let subtotal = $("#subtotal").val(); // TODO: convert USD price from global config, fetch price from api and convert usd to token
       // Not all tokens have 18 decimals, some tokens use less; e.g. USDC (not on all chains) uses 6 decimals
-      let priceInUnit = BN(price).mul(BN(10**tokenDecimals)); // It's important to convert the number using the proper decimals
-      let totalValue = priceInUnit.mul(BN(quantity.toString()));
-      console.log('Total Value:', totalValue.toString(), 'Human friendly:', web3.utils.fromWei(totalValue.toString()));
+      let rate = 0.99 * multiplier; // It's important to convert the number using the proper decimals
+      let totalValue = BN(subtotal.toString()).mul(BN(rate.toString()));
+      let humanFriendlyAmount = totalValue.div(BN(multiplier));
+      console.log('Total Value:', totalValue.toString(), 'Human friendly:', humanFriendlyAmount);
+
+      $('#preview').html(`To pay: ${humanFriendlyAmount} ${symbol}`).show();
   
       let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
       let hasEnoughBalance = await handleLowBalance(web3, selectedAccount, totalValue, lowBalanceMessage, tokenContract);
@@ -144,6 +151,7 @@ async function pay() { // todo: rename to pay, add also approve function for erc
 
         if (!approveResult) {
           showOrHideError('You must approve in order to pay');
+          interactionDone();
           return;
         }
       }
@@ -186,6 +194,7 @@ function interactionInProgress() {
 }
 
 function interactionDone() {
+  $('#preview').html('').hide();
   $("#loading").hide();
   $('#btn-pay').prop('disabled', false);
 }
