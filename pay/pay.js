@@ -1,6 +1,6 @@
 import { payAbi as ABI } from "./pay_abi.js";
 import { erc20Abi as ERC20_ABI } from "./erc20minimal_abi.js";
-import { init, updateMintInfo, showOrHideError, onConnect, switchNetwork, handleLowBalance } from "./shared.js";
+import { init, showOrHideError, onConnect, handleLowBalance } from "./shared.js";
 
 // paymentSplitter PROJECT_ID to use, every project gets a different PROJECT_ID don't just reuse 0 all the time, ask the smart contract dev or the project manager which PROJECT_ID to use
 const PROJECT_ID = 0;
@@ -29,13 +29,9 @@ const chainInfo = {
   }
 }
 
-const contractChainId = 4002;
-
-// TODO: check supported chain
-
 const Web3 = window.Web3;
 
-let web3, selectedAccount, contract, contractAddress;
+let web3, chainId, selectedAccount, contract, contractAddress;
 
 async function fetchAccountData() {
   showOrHideError();
@@ -43,8 +39,7 @@ async function fetchAccountData() {
   web3 = new Web3(window.provider);
   // console.log("Web3 instance is", web3);
 
-  // await switchNetwork(web3, contractChainId);
-  // TODO check supported chain
+  chainId = await web3.eth.getChainId();
 
   // Populate list of coins based on selected chain
   // $('input[name="coin"]').change(function() {
@@ -57,13 +52,16 @@ async function fetchAccountData() {
   // console.log("Got accounts", accounts);
   selectedAccount = accounts[0];
 
-  document.querySelector("#prepare").style.display = "none";
-  document.querySelector("#connected").style.display = "block";
-
-  console.log('contract address', chainInfo[contractChainId]);
-  contractAddress = chainInfo[contractChainId].contractAddress;
-  contract = await new web3.eth.Contract(ABI, contractAddress); // TODO: update connected chainId
-  // console.log(contract);
+  console.log('contract address', chainInfo[chainId]);
+  contractAddress = chainInfo[chainId]?.contractAddress;
+  if (contractAddress != undefined) {
+    contract = await new web3.eth.Contract(ABI, contractAddress);
+    // console.log(contract);
+    document.querySelector("#prepare").style.display = "none";
+    document.querySelector("#connected").style.display = "block";    
+  } else {
+    showOrHideError('Please connect to one of our supported chains: Fantom, ...')
+  }
 }
 
 async function getTokenContract(tokenAddress) {
@@ -80,7 +78,7 @@ async function pay() {
 
     let paymentResult;
     if (selectedCoin == 'native') {
-      let symbol = chainInfo[contractChainId].symbol;
+      let symbol = chainInfo[chainId].symbol;
       let subtotal = $("#subtotal").val(); // TODO: convert USD price from global config, fetch price from api and convert usd to token
       let rate = 0.35 * 1e18; // TODO: fetch this via api or use a default/minimum rate
       let totalWei = BN(subtotal.toString()).mul(BN(rate.toString()));
@@ -110,7 +108,7 @@ async function pay() {
       // End Native payment
     } else {
       // ERC20 token payment, e.g. USDC or any other token
-      const coinInfo = chainInfo[contractChainId].paymentTokens[selectedCoin];
+      const coinInfo = chainInfo[chainId].paymentTokens[selectedCoin];
       const tokenAddress = coinInfo.address;
       const tokenDecimals = coinInfo.decimals;
       const tokenContract = await getTokenContract(tokenAddress);
@@ -201,7 +199,7 @@ function interactionDone() {
 
 window.addEventListener('load', async () => {
   init();
-  // updateMintInfo(contractChainId, ABI, CONTRACT_ADDRESS);
+  // updateMintInfo(chainId, ABI, CONTRACT_ADDRESS);
   document.querySelector("#btn-connect").addEventListener("click", async () => {
     await onConnect(fetchAccountData);
   });
