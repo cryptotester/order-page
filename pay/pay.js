@@ -119,12 +119,12 @@ async function pay() {
 
       let subtotal = $("#subtotal").val(); // TODO: convert USD price from global config, fetch price from api and convert usd to token
       // Not all tokens have 18 decimals, some tokens use less; e.g. USDC (not on all chains) uses 6 decimals
-      let rate = 0.99 * multiplier; // It's important to convert the number using the proper decimals
+      let rate = 0.993764 * multiplier; // It's important to convert the number using the proper decimals
       let totalValue = BN(subtotal.toString()).mul(BN(rate.toString()));
-      let humanFriendlyAmount = totalValue.div(BN(multiplier));
+      let humanFriendlyAmount = parseFloat(totalValue) / parseFloat(multiplier);
       console.log('Total Value:', totalValue.toString(), 'Human friendly:', humanFriendlyAmount);
 
-      $('#preview').html(`To pay: ${humanFriendlyAmount} ${symbol}`).show();
+      $('#preview').html(`To pay: ${humanFriendlyAmount.toFixed(2)} ${symbol}`).show();
   
       let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
       let hasEnoughBalance = await handleLowBalance(web3, selectedAccount, totalValue, lowBalanceMessage, tokenContract);
