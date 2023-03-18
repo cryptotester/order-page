@@ -26,9 +26,11 @@
               <div class="col-6 col-md-4 mb-3">
 
                 Select coin:<br>
-                <input type="radio" name="coin" id="native" value="native"><label for="native">Native</label><br><br>
-                <input type="radio" name="coin" id="testcoin" value="testcoin" class="erc20"><label for="testcoin">Test Coin</label><br><br>
-                <input type="radio" name="coin" id="testusd" value="testusd" class="erc20"><label for="testusd">Test USD</label>
+                <input type="radio" name="coin" id="native" value="native" checked><label for="native">Native</label><br><br>
+                <div id="coins">
+                  <input type="radio" name="coin" id="tc" value="tc" class="erc20"><label for="tc">Test Coin</label><br><br>
+                  <input type="radio" name="coin" id="usd" value="usd" class="erc20"><label for="usd">Test USD</label>
+                </div>
                 <br><br>
 
                 Subtotal in USD (to be converted in crypto):

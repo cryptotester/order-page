@@ -9,21 +9,39 @@ const chainInfo = {
   4002: {
     name: "Fantom Testnet",
     symbol: "FTM",
-    minRate: 0.35,
-    priceApiUrl: "",
+    fallbackRate: 0.5,
+    priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=FTMUSDT",
     contractAddress: "0xfb0F0069D94a491A2a312DDAdc717d9bbC1a5a98", // paymentSplitter2 smart contract address
     paymentTokens: {
-      "testcoin":  {
-        symbol: "TC",
+      "TC":  {
+        fallbackRate: 1.3,
         address: "0x19EA0fE857b4f007fAD4A58c23737390F6DDc861",
         decimals: 18,
-        priceApiUrl: "",
+        priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=MATICUSDT",
       },
-      "testusd":  {
-        symbol: "USD",
+      "USD":  {
+        fallbackRate: 1,
         address: "0xa70049260772E13dfFaC2aF8445159595fdf4C98",
         decimals: 6,
-        priceApiUrl: "",
+      }
+    },
+    250: {
+      name: "Fantom Opera",
+      symbol: "FTM",
+      fallbackRate: 0.5,
+      priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=FTMUSDT",
+      contractAddress: "", // paymentSplitter2 smart contract address
+      paymentTokens: {
+        "USDC":  {
+          fallbackRate: 1,
+          address: "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",
+          decimals: 6,
+        },
+        "USDT":  {
+          fallbackRate: 1,
+          address: "0x049d68029688eabf473097a2fc38ef61633a3c7a",
+          decimals: 6,
+        }
       }
     }
   }
@@ -60,7 +78,8 @@ async function fetchAccountData() {
     document.querySelector("#prepare").style.display = "none";
     document.querySelector("#connected").style.display = "block";    
   } else {
-    showOrHideError('Please connect to one of our supported chains: Fantom, ...')
+    // showOrHideError('Please connect to one of our supported chains: Fantom Opera (more chains to be added)');
+    showOrHideError('Please connect to Fantom Opera');
   }
 }
 
@@ -69,27 +88,68 @@ async function getTokenContract(tokenAddress) {
   return new web3.eth.Contract(ERC20_ABI, tokenAddress);
 }
 
+
+async function getRate(symbol) {
+  symbol = symbol.toUpperCase();
+  let priceApiUrl, fallbackRate;
+  if (symbol == 'NATIVE') {
+    priceApiUrl = chainInfo[chainId].priceApiUrl;
+    fallbackRate = chainInfo[chainId].fallbackRate;
+  } else {
+    priceApiUrl = chainInfo[chainId].paymentTokens[symbol].priceApiUrl;
+    fallbackRate = chainInfo[chainId].paymentTokens[symbol].fallbackRate;
+  }
+  
+  if (priceApiUrl) {
+    // Get e.g. {"symbol":"MATICUSDT","price":"1.18180000"}
+    const binanceRate = await axios.get(priceApiUrl)
+      .then(response => {
+        // console.log('Axios got a response...');console.log(response);
+        return response.data;
+      })
+      .catch(error => {
+        console.log(error);
+        // Use fallback rate in case of error
+        return { price: fallbackRate }
+      });
+    return parseFloat(binanceRate.price);
+  } else {
+    return fallbackRate;
+  }
+}
+
 async function pay() {
   showOrHideError();
   try {
     let BN = web3.utils.toBN;
+
+    let subtotal = $("#subtotal").val();
+
     let selectedCoin = $('input[name="coin"]:checked').val();
+    selectedCoin = selectedCoin.toUpperCase();
     console.log('Selected coin:', selectedCoin);
 
-    let paymentResult;
-    if (selectedCoin == 'native') {
-      let symbol = chainInfo[chainId].symbol;
-      let subtotal = $("#subtotal").val(); // TODO: convert USD price from global config, fetch price from api and convert usd to token
-      let rate = 0.35 * 1e18; // TODO: fetch this via api or use a default/minimum rate
-      let totalWei = BN(subtotal.toString()).mul(BN(rate.toString()));
-      // let totalWei = BN(web3.utils.toWei(totalNative.toString())); // https://web3js.readthedocs.io/en/v1.2.11/web3-utils.html#towei
-      let humanFriendlyAmount = web3.utils.fromWei(totalWei.toString());
-      console.log('Total Value:', totalWei.toString(), 'Human friendly:', humanFriendlyAmount);
+    let rate = (await getRate(selectedCoin));
+    // console.log(rate);
 
+    let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
+    let paymentResult;
+    if (selectedCoin == 'NATIVE') {
+      console.log(`Initiating native coin payment`);
+      let symbol = chainInfo[chainId].symbol;
+      
+      let totalValue = BN(1e18 * parseFloat(subtotal) / rate); // Get the price in wei (amount of native coin * 1e18)
+      console.log(`totalValue ${totalValue}`);
+      let humanFriendlyAmount = web3.utils.fromWei(totalValue.toString());
+      console.log('Total Value:', totalValue.toString(), 'Human friendly:', humanFriendlyAmount);
+
+      if (totalValue == 0) {
+        showOrHideError('The amount must be > 0 in order to proceed');
+        return;
+      }
       $('#preview').html(`To pay: ${humanFriendlyAmount} ${symbol}`).show();
   
-      let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
-      let hasEnoughBalance = await handleLowBalance(web3, selectedAccount, totalWei, lowBalanceMessage);
+      let hasEnoughBalance = await handleLowBalance(web3, selectedAccount, totalValue, lowBalanceMessage);
       if (!hasEnoughBalance) {
         return;
       }
@@ -98,33 +158,29 @@ async function pay() {
 
       interactionInProgress();
 
-      paymentResult = await contract.methods.splitPayment(PROJECT_ID).send({ from: selectedAccount, value: totalWei });
+      paymentResult = await contract.methods.splitPayment(PROJECT_ID).send({ from: selectedAccount, value: totalValue });
       if (!paymentResult) {
         console.log(`Payment error`);
       }
 
       interactionDone();
-
-      // End Native payment
     } else {
       // ERC20 token payment, e.g. USDC or any other token
-      const coinInfo = chainInfo[chainId].paymentTokens[selectedCoin];
-      const tokenAddress = coinInfo.address;
-      const tokenDecimals = coinInfo.decimals;
-      const tokenContract = await getTokenContract(tokenAddress);
-      let symbol = coinInfo.symbol;
-      let multiplier = 10**tokenDecimals;
+      
+      const token = chainInfo[chainId].paymentTokens[selectedCoin];
+      const tokenContract = await getTokenContract(token.address);
+      let multiplier = 10**token.decimals; // Use the proper token decimals (not only 18, USDC e.g. has only 6)
 
-      let subtotal = $("#subtotal").val(); // TODO: convert USD price from global config, fetch price from api and convert usd to token
-      // Not all tokens have 18 decimals, some tokens use less; e.g. USDC (not on all chains) uses 6 decimals
-      let rate = 0.993764 * multiplier; // It's important to convert the number using the proper decimals
-      let totalValue = BN(subtotal.toString()).mul(BN(rate.toString()));
+      let totalValue = BN(multiplier * parseFloat(subtotal) / rate);
       let humanFriendlyAmount = parseFloat(totalValue) / parseFloat(multiplier);
       console.log('Total Value:', totalValue.toString(), 'Human friendly:', humanFriendlyAmount);
 
-      $('#preview').html(`To pay: ${humanFriendlyAmount.toFixed(2)} ${symbol}`).show();
+      if (totalValue == 0) {
+        showOrHideError('The amount must be > 0 in order to proceed');
+        return;
+      }
+      $('#preview').html(`To pay: ${humanFriendlyAmount.toFixed(2)} ${selectedCoin}`).show();
   
-      let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
       let hasEnoughBalance = await handleLowBalance(web3, selectedAccount, totalValue, lowBalanceMessage, tokenContract);
       if (!hasEnoughBalance) {
         return;
@@ -134,9 +190,10 @@ async function pay() {
       let error;
 
       let allowance = await tokenContract.methods.allowance(selectedAccount, contractAddress).call();
-      console.log(`Allowance: ${allowance}`);
-      if (BigInt(allowance) < BigInt(totalValue)) {
+      console.log(`Actual allowance: ${allowance}`);
+      if (BN(allowance).lt(BN(totalValue))) {
         // Initiating approval request
+        console.log(`Asking approval to spend ${humanFriendlyAmount} ${selectedCoin} (* 1e${token.decimals} = ${totalValue})`);
         let approveResult = await tokenContract.methods.approve(contractAddress, totalValue.toString()).send({ from: selectedAccount })
           .catch(x => {
             error = x;
@@ -154,8 +211,8 @@ async function pay() {
         }
       }
 
-      console.log(`Initiating payment in ${selectedCoin}, tokenAddress: ${tokenAddress}`);
-      paymentResult = await contract.methods.splitTokenPayment(PROJECT_ID, tokenAddress, totalValue.toString()).send({ from: selectedAccount })
+      console.log(`Initiating payment in ${selectedCoin}, token address: ${token.address}`);
+      paymentResult = await contract.methods.splitTokenPayment(PROJECT_ID, token.address, totalValue.toString()).send({ from: selectedAccount })
         .catch(x => {
           error = x;
           // console.log(x.message)
@@ -164,7 +221,6 @@ async function pay() {
           // console.log(x);
           return x;
         });
-      // End ERC20 token payment
     } // End payment block
 
     if (paymentResult) {

@@ -132,6 +132,7 @@ async function handleLowBalance(web3, selectedAccount, expectedAmount, lowBalanc
   if (!tokenContract) {
     // Native coin balance check
     amountInBaseCoin = web3.utils.fromWei(expectedAmount.toString());
+    // console.log(`Amount in base coin ${amountInBaseCoin}`);
     userBalance = await web3.eth.getBalance(selectedAccount);
   } else {
     // ERC20 token balance check
@@ -142,7 +143,7 @@ async function handleLowBalance(web3, selectedAccount, expectedAmount, lowBalanc
     console.log(`userBalance: ${amountInBaseCoin}`);
   }
   // let balanceInEth = web3.utils.fromWei(userBalance);
-  if (BigInt(userBalance) < BigInt(expectedAmount)) {
+  if (BN(userBalance).lt(BN(expectedAmount))) {
     lowBalanceMessage = lowBalanceMessage.replace('[AMOUNT]', amountInBaseCoin);
     console.log(lowBalanceMessage);
     showOrHideError(lowBalanceMessage);
