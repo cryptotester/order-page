@@ -65,9 +65,9 @@
           {{#image}}
             <img src="{{image}}" style="max-width: 100%;">
           {{/image}}
-          {{#token_uri}}
+          {{^image}}
             <a href="{{token_uri}}" target="_blank">metadata</a>
-          {{/token_uri}}
+          {{/image}}
         </div>
       {{/nfts}}
     </script>

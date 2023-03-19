@@ -112,13 +112,15 @@ async function fetchAccountData() {
 
   let nfts = ownedNfts.map(x => {
     let result = {
-      name: `${x.name} #${x.token_id}`,
-      // image: 'https://picsum.photos/id/1/100/100' // TODO: use a default image?
+      token_name: x.name,
+      token_id: x.token_id,
+      token_uri: x.token_uri,
+      token_address: x.token_address,
     };
     let metadataStr = x.metadata;
     if (metadataStr) {
       let metadata = JSON.parse(metadataStr);
-      if (metadata.name) result.name = metadata.name;
+      result.name = metadata.name;
       if (metadata.image) {
         result.image = metadata.image.replace('ipfs://', ipfsCacheUrl);
       } else {
@@ -127,8 +129,9 @@ async function fetchAccountData() {
         // TODO: use a default image?
       }
     } else {
+      // no metadata
+      result.name = result.name || `${x.name} #${x.token_id}`;
       // console.log(x);
-      result.token_uri = x.token_uri;
     }
     // console.log(result);
     return result;
