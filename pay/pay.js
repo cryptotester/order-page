@@ -8,11 +8,13 @@ const PROJECT_ID = 0;
 const chainInfo = {
   4002: {
     name: "Fantom Testnet",
-    symbol: "FTM",
-    fallbackRate: 0.5,
-    priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=FTMUSDT",
     contractAddress: "0xfb0F0069D94a491A2a312DDAdc717d9bbC1a5a98", // paymentSplitter2 smart contract address
-    paymentTokens: {
+    currencies: {
+      "NATIVE": {
+        symbol: "FTM",
+        fallbackRate: 0.5,
+        priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=FTMUSDT",
+      },
       "TC":  {
         fallbackRate: 1.3,
         address: "0x19EA0fE857b4f007fAD4A58c23737390F6DDc861",
@@ -27,11 +29,13 @@ const chainInfo = {
     },
     250: {
       name: "Fantom Opera",
-      symbol: "FTM",
-      fallbackRate: 0.5,
-      priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=FTMUSDT",
       contractAddress: "", // paymentSplitter2 smart contract address
-      paymentTokens: {
+      currencies: {
+        "NATIVE": {
+          symbol: "FTM",
+          fallbackRate: 0.5,
+          priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=FTMUSDT",
+        },
         "USDC":  {
           fallbackRate: 1,
           address: "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",
@@ -91,14 +95,8 @@ async function getTokenContract(tokenAddress) {
 
 async function getRate(symbol) {
   symbol = symbol.toUpperCase();
-  let priceApiUrl, fallbackRate;
-  if (symbol == 'NATIVE') {
-    priceApiUrl = chainInfo[chainId].priceApiUrl;
-    fallbackRate = chainInfo[chainId].fallbackRate;
-  } else {
-    priceApiUrl = chainInfo[chainId].paymentTokens[symbol].priceApiUrl;
-    fallbackRate = chainInfo[chainId].paymentTokens[symbol].fallbackRate;
-  }
+  let priceApiUrl = chainInfo[chainId].currencies[symbol].priceApiUrl;
+  let fallbackRate = chainInfo[chainId].currencies[symbol].fallbackRate;
   
   if (priceApiUrl) {
     // Get e.g. {"symbol":"MATICUSDT","price":"1.18180000"}
@@ -121,22 +119,21 @@ async function getRate(symbol) {
 async function pay() {
   showOrHideError();
   try {
-    let BN = web3.utils.toBN;
+    const BN = web3.utils.toBN;
 
     let subtotal = $("#subtotal").val();
-
     let selectedCoin = $('input[name="coin"]:checked').val();
     selectedCoin = selectedCoin.toUpperCase();
-    console.log('Selected coin:', selectedCoin);
+    let symbol = selectedCoin == 'NATIVE' ? chainInfo[chainId].currencies['NATIVE'].symbol : selectedCoin;
+    console.log('Selected payment:', symbol);
 
-    let rate = (await getRate(selectedCoin));
+    let rate = await getRate(selectedCoin);
     // console.log(rate);
 
     let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
     let paymentResult;
     if (selectedCoin == 'NATIVE') {
       console.log(`Initiating native coin payment`);
-      let symbol = chainInfo[chainId].symbol;
       
       let totalValue = BN(1e18 * parseFloat(subtotal) / rate); // Get the price in wei (amount of native coin * 1e18)
       console.log(`totalValue ${totalValue}`);
@@ -166,8 +163,9 @@ async function pay() {
       interactionDone();
     } else {
       // ERC20 token payment, e.g. USDC or any other token
+      console.log(`Initiating ERC-20 token payment`);
       
-      const token = chainInfo[chainId].paymentTokens[selectedCoin];
+      const token = chainInfo[chainId].currencies[selectedCoin];
       const tokenContract = await getTokenContract(token.address);
       let multiplier = 10**token.decimals; // Use the proper token decimals (not only 18, USDC e.g. has only 6)
 
@@ -260,7 +258,7 @@ window.addEventListener('load', async () => {
     await onConnect(fetchAccountData);
   });
   document.querySelector("#btn-pay").addEventListener("click", pay);
-  document.querySelector("input.erc20").addEventListener("click", async(e) => {
-    console.log(`ERC20 token clicked: handle allowance for`, e.target.value);
-  });
+  // document.querySelector("input.erc20").addEventListener("click", async(e) => {
+  //   console.log(`ERC20 token clicked: handle allowance for`, e.target.value);
+  // });
 });

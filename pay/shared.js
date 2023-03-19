@@ -140,7 +140,7 @@ async function handleLowBalance(web3, selectedAccount, expectedAmount, lowBalanc
     // console.log(`userBalance: ${userBalance}`);
     let decimals = await tokenContract.methods.decimals().call();    
     amountInBaseCoin = BN(userBalance).div(BN(10 ** decimals));
-    console.log(`userBalance: ${amountInBaseCoin}`);
+    console.log(`Token Balance: ${amountInBaseCoin}`);
   }
   // let balanceInEth = web3.utils.fromWei(userBalance);
   if (BN(userBalance).lt(BN(expectedAmount))) {
