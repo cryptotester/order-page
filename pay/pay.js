@@ -1,13 +1,16 @@
 import { payAbi as ABI } from "./pay_abi.js";
 import { erc20Abi as ERC20_ABI } from "./erc20minimal_abi.js";
-import { init, showOrHideError, onConnect, handleLowBalance } from "./shared.js";
+import { init, showOrHideError, onConnect, handleLowBalance, switchNetwork, sleep } from "./shared.js";
 
 // paymentSplitter PROJECT_ID to use, every project gets a different PROJECT_ID don't just reuse 0 all the time, ask the smart contract dev or the project manager which PROJECT_ID to use
 const PROJECT_ID = 0;
+// const mandatoryChainId = 250; // for Teens on Acid, the mandatory chain is 250
+const mandatoryChainId = 4002; // for Teens on Acid, the mandatory chain is 250, 4002 for testing on testnet
 
 const chainInfo = {
   4002: {
     name: "Fantom Testnet",
+    explorerUrl: "https://testnet.ftmscan.com",
     contractAddress: "0xfb0F0069D94a491A2a312DDAdc717d9bbC1a5a98", // paymentSplitter2 smart contract address
     currencies: {
       "NATIVE": {
@@ -29,6 +32,7 @@ const chainInfo = {
     },
     250: {
       name: "Fantom Opera",
+      explorerUrl: "https://ftmscan.com",
       contractAddress: "", // paymentSplitter2 smart contract address
       currencies: {
         "NATIVE": {
@@ -61,7 +65,22 @@ async function fetchAccountData() {
   web3 = new Web3(window.provider);
   // console.log("Web3 instance is", web3);
 
+  await switchNetwork(web3, mandatoryChainId);
+  // console.log('Switched network');
   chainId = await web3.eth.getChainId();
+
+  // console.log('contract address', chainInfo[chainId]);
+  contractAddress = chainInfo[chainId]?.contractAddress;
+  if (contractAddress != undefined) {
+    contract = await new web3.eth.Contract(ABI, contractAddress);
+    // console.log(contract);
+    document.querySelector("#prepare").style.display = "none";
+    document.querySelector("#connected").style.display = "block";    
+  } else {
+    // showOrHideError('Please connect to one of our supported chains: Fantom Opera (more chains to be added)');
+    showOrHideError('Please connect to Fantom TESTNET');
+    return;
+  }
 
   // Populate list of coins based on selected chain
   // $('input[name="coin"]').change(function() {
@@ -74,35 +93,38 @@ async function fetchAccountData() {
   // console.log("Got accounts", accounts);
   selectedAccount = accounts[0];
 
-  let walletAddress = selectedAccount;
-
+  let walletAddress = selectedCoin;
   const ownedNftsQuery = `https://api.binarypunks.com/nfts.php?wallet=${walletAddress}`;
   const ownedNfts = await axios.get(ownedNftsQuery)
-  .then(response => {
-    // console.log('Axios got a response...');console.log(response);
-    return response.data;
-  })
-  .catch(error => {
-    console.log(error);
-    // Use fallback rate in case of error
-    return [];
-  });
+    .then(response => {
+      // console.log('Axios got a response...');console.log(response);
+      return response.data;
+    })
+    .catch(error => {
+      console.log(error);
+      // Use fallback rate in case of error
+      return [];
+    });
   console.log('Owned NFTs', ownedNfts);
+
+  // let ipfsUrl = 'https://ipfs.io/ipfs/'; // This is the "original IPFS"
+  let ipfsCacheUrl = 'https://nftstorage.link/ipfs/'; // NFT Storage is way faster
 
   let nfts = ownedNfts.map(x => {
     let result = {
       name: `${x.name} #${x.token_id}`,
-      image: 'https://picsum.photos/id/1/100/100' // TODO: use better default image
+      // image: 'https://picsum.photos/id/1/100/100' // TODO: use a default image?
     };
     let metadataStr = x.metadata;
     if (metadataStr) {
       let metadata = JSON.parse(metadataStr);
       if (metadata.name) result.name = metadata.name;
       if (metadata.image) {
-        // TODO: use ipfs caching server
-        result.image = metadata.image.replace('ipfs://', 'https://ipfs.io/ipfs/');
+        result.image = metadata.image.replace('ipfs://', ipfsCacheUrl);
       } else {
+        // no image
         // console.log(x);
+        // TODO: use a default image?
       }
     } else {
       // console.log(x);
@@ -116,25 +138,12 @@ async function fetchAccountData() {
   Mustache.parse(template);
   let rendered = Mustache.render(template, { nfts: nfts });
   $('#gallery').html(rendered);
-
-  console.log('contract address', chainInfo[chainId]);
-  contractAddress = chainInfo[chainId]?.contractAddress;
-  if (contractAddress != undefined) {
-    contract = await new web3.eth.Contract(ABI, contractAddress);
-    // console.log(contract);
-    document.querySelector("#prepare").style.display = "none";
-    document.querySelector("#connected").style.display = "block";    
-  } else {
-    // showOrHideError('Please connect to one of our supported chains: Fantom Opera (more chains to be added)');
-    showOrHideError('Please connect to Fantom Opera');
-  }
 }
 
 async function getTokenContract(tokenAddress) {
   // console.log(`ERC20 Token address: ${tokenAddress}`);
   return new web3.eth.Contract(ERC20_ABI, tokenAddress);
 }
-
 
 async function getRate(symbol) {
   symbol = symbol.toUpperCase();
@@ -174,7 +183,7 @@ async function pay() {
     // console.log(rate);
 
     let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
-    let paymentResult;
+    let paymentReceipt;
     if (selectedCoin == 'NATIVE') {
       console.log(`Initiating native coin payment`);
       
@@ -198,8 +207,8 @@ async function pay() {
 
       interactionInProgress();
 
-      paymentResult = await contract.methods.splitPayment(PROJECT_ID).send({ from: selectedAccount, value: totalValue });
-      if (!paymentResult) {
+      paymentReceipt = await contract.methods.splitPayment(PROJECT_ID).send({ from: selectedAccount, value: totalValue });
+      if (!paymentReceipt) {
         console.log(`Payment error`);
       }
 
@@ -253,7 +262,7 @@ async function pay() {
       }
 
       console.log(`Initiating payment in ${selectedCoin}, token address: ${token.address}`);
-      paymentResult = await contract.methods.splitTokenPayment(PROJECT_ID, token.address, totalValue.toString()).send({ from: selectedAccount })
+      paymentReceipt = await contract.methods.splitTokenPayment(PROJECT_ID, token.address, totalValue.toString()).send({ from: selectedAccount })
         .catch(x => {
           error = x;
           // console.log(x.message)
@@ -264,11 +273,12 @@ async function pay() {
         });
     } // End payment block
 
-    if (paymentResult) {
+    if (paymentReceipt) {
       // Payment OK
-      console.log(paymentResult);
+      console.log(paymentReceipt);
+      let transactionUrl = `${chainInfo[chainId].explorerUrl}/tx/${paymentReceipt.transactionHash}`;
       // TODO: after payment, if you need to call a javascript function to show a success page etc., put it here
-      console.log(`THANK YOU`);
+      console.log(`THANK YOU. Transaction`, transactionUrl);
     }
 
     interactionDone();
@@ -285,7 +295,6 @@ function interactionInProgress() {
   // show loading indicator and hide mint button
   $('#btn-pay').prop('disabled', true);
   $("#loading").show();
-  // $(".after-interaction").hide(); // hiding previously shown confirmation
 }
 
 function interactionDone() {

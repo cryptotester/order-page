@@ -100,9 +100,9 @@ async function onConnect(fetchAccountDataFn, afterFn) {
     fetchAccountDataFn();
   });
 
-  window.provider.on("networkChanged", (networkId) => {
-    fetchAccountDataFn();
-  });
+  // window.provider.on("networkChanged", (networkId) => {
+  //   fetchAccountDataFn();
+  // });
 
   await _refreshAccountData(fetchAccountDataFn);
 }
@@ -118,6 +118,7 @@ async function switchNetwork(web3, chainId) {
         method: "wallet_switchEthereumChain",
         params: [{ chainId: `0x${(chainId).toString(16)}` }]
       });
+      // console.log(`Switched to ${chainId}`);
     } catch (error) {
       showOrHideError(`Please switch to ${networkName}`);
     }

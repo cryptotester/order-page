@@ -61,8 +61,13 @@
     <script id="gallery-template" type="x-tmpl-mustache">
       {{#nfts}}
         <div class="image" style="max-width: 200px; display: inline-block; margin-right: 0 0 5px 5px;">
-          <span>{{name}}</span>
-          <img src="{{image}}" style="max-width: 100%;">
+          <div>{{name}}</div>
+          {{#image}}
+            <img src="{{image}}" style="max-width: 100%;">
+          {{/image}}
+          {{#token_uri}}
+            <a href="{{token_uri}}" target="_blank">metadata</a>
+          {{/token_uri}}
         </div>
       {{/nfts}}
     </script>
