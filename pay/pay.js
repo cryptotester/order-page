@@ -74,6 +74,49 @@ async function fetchAccountData() {
   // console.log("Got accounts", accounts);
   selectedAccount = accounts[0];
 
+  let walletAddress = selectedAccount;
+
+  const ownedNftsQuery = `https://api.binarypunks.com/nfts.php?wallet=${walletAddress}`;
+  const ownedNfts = await axios.get(ownedNftsQuery)
+  .then(response => {
+    // console.log('Axios got a response...');console.log(response);
+    return response.data;
+  })
+  .catch(error => {
+    console.log(error);
+    // Use fallback rate in case of error
+    return [];
+  });
+  console.log('Owned NFTs', ownedNfts);
+
+  let nfts = ownedNfts.map(x => {
+    let result = {
+      name: `${x.name} #${x.token_id}`,
+      image: 'https://picsum.photos/id/1/100/100' // TODO: use better default image
+    };
+    let metadataStr = x.metadata;
+    if (metadataStr) {
+      let metadata = JSON.parse(metadataStr);
+      if (metadata.name) result.name = metadata.name;
+      if (metadata.image) {
+        // TODO: use ipfs caching server
+        result.image = metadata.image.replace('ipfs://', 'https://ipfs.io/ipfs/');
+      } else {
+        // console.log(x);
+      }
+    } else {
+      // console.log(x);
+      result.token_uri = x.token_uri;
+    }
+    // console.log(result);
+    return result;
+  });
+
+  let template = $('#gallery-template').html();
+  Mustache.parse(template);
+  let rendered = Mustache.render(template, { nfts: nfts });
+  $('#gallery').html(rendered);
+
   console.log('contract address', chainInfo[chainId]);
   contractAddress = chainInfo[chainId]?.contractAddress;
   if (contractAddress != undefined) {
