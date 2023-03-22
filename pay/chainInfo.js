@@ -3,7 +3,7 @@ const CHAIN_INFO = {
     name: "Fantom Testnet",
     isTestnet: true,
     explorerUrl: "https://testnet.ftmscan.com",
-    contractAddress: "0xfb0F0069D94a491A2a312DDAdc717d9bbC1a5a98", // paymentSplitter2 smart contract address
+    contractAddress: "0x042f3A75d326b58995742A07E3a8e104B0446bf4", // paymentSplitter3 smart contract address
     currencies: {
       "NATIVE": {
         symbol: "FTM",
@@ -25,7 +25,7 @@ const CHAIN_INFO = {
     250: {
       name: "Fantom Opera",
       explorerUrl: "https://ftmscan.com",
-      contractAddress: "", // paymentSplitter2 smart contract address
+      contractAddress: "", // paymentSplitter3 smart contract address
       currencies: {
         "NATIVE": {
           symbol: "FTM",

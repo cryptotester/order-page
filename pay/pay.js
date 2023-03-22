@@ -1,4 +1,4 @@
-import { ABI_PAYMENTSPLITTER2 } from "./abi_paymentSplitter2.js";
+import { ABI_PAYMENTSPLITTER3 } from "./abi_paymentSplitter3.js";
 import { ERC20_ABI } from "./abi_erc20.js";
 import { CHAIN_INFO } from "./chainInfo.js";
 import { init, showOrHideError, onConnect, handleLowBalance, switchNetwork, sleep, getSupportedChainNames } from "./shared.js";
@@ -25,7 +25,7 @@ async function fetchAccountData() {
 
   contractAddress = CHAIN_INFO[chainId]?.contractAddress;
   if (contractAddress != undefined) {
-    contract = await new web3.eth.Contract(ABI_PAYMENTSPLITTER2, contractAddress);
+    contract = await new web3.eth.Contract(ABI_PAYMENTSPLITTER3, contractAddress);
     document.querySelector("#prepare").style.display = "none";
     document.querySelector("#connected").style.display = "block";    
   } else {
@@ -131,6 +131,7 @@ async function pay() {
     const BN = web3.utils.toBN;
 
     let total = $("#total").val();
+    let expenses = $("#expenses").val();
     let selectedCoin = $('input[name="coin"]:checked').val();
     selectedCoin = selectedCoin.toUpperCase();
     let symbol = selectedCoin == 'NATIVE' ? CHAIN_INFO[chainId].currencies['NATIVE'].symbol : selectedCoin;
@@ -144,9 +145,12 @@ async function pay() {
       console.log(`Initiating native coin payment`);
       
       let totalValue = BN(1e18 * parseFloat(total) / rate); // Get the price in wei (amount of native coin * 1e18)
-      console.log(`totalValue ${totalValue}`);
+      let expensesValue = BN(1e18 * parseFloat(expenses) / rate);
+      // console.log(`totalValue ${totalValue}`);
       let humanFriendlyAmount = web3.utils.fromWei(totalValue.toString());
+      let humanFriendlyExpensesAmount = web3.utils.fromWei(expensesValue.toString());
       console.log('Total Value:', totalValue.toString(), 'Human friendly:', humanFriendlyAmount);
+      console.log('Expenses Value:', expensesValue.toString(), 'Human friendly expenses:', humanFriendlyExpensesAmount);
 
       if (totalValue == 0) {
         showOrHideError('The amount must be > 0 in order to proceed');
@@ -163,7 +167,7 @@ async function pay() {
 
       interactionInProgress();
 
-      paymentReceipt = await contract.methods.splitPayment(PROJECT_ID).send({ from: selectedAccount, value: totalValue });
+      paymentReceipt = await contract.methods.splitPayment(PROJECT_ID, expensesValue).send({ from: selectedAccount, value: totalValue });
       if (!paymentReceipt) {
         console.log(`Payment error`);
       }
@@ -175,11 +179,14 @@ async function pay() {
       
       const token = CHAIN_INFO[chainId].currencies[selectedCoin];
       const tokenContract = await getTokenContract(token.address);
-      let multiplier = 10**token.decimals; // Use the proper token decimals (not only 18, USDC e.g. has only 6)
+      let multiplier = 10 ** token.decimals; // Use the proper token decimals (not only 18, USDC e.g. has only 6)
 
       let totalValue = BN(multiplier * parseFloat(total) / rate);
+      let expensesValue = BN(multiplier * parseFloat(expenses) / rate);
       let humanFriendlyAmount = parseFloat(totalValue) / parseFloat(multiplier);
+      let humanFriendlyExpensesAmount = parseFloat(expensesValue) / parseFloat(multiplier);
       console.log('Total Value:', totalValue.toString(), 'Human friendly:', humanFriendlyAmount);
+      console.log('Expenses Value:', expensesValue.toString(), 'Human friendly expenses:', humanFriendlyExpensesAmount);
 
       if (totalValue == 0) {
         showOrHideError('The amount must be > 0 in order to proceed');
@@ -216,7 +223,7 @@ async function pay() {
       }
 
       console.log(`Initiating payment in ${selectedCoin}, token address: ${token.address}`);
-      paymentReceipt = await contract.methods.splitTokenPayment(PROJECT_ID, token.address, totalValue.toString()).send({ from: selectedAccount })
+      paymentReceipt = await contract.methods.splitTokenPayment(PROJECT_ID, token.address, totalValue.toString(), expensesValue.toString()).send({ from: selectedAccount })
         .catch(x => {
           error = x;
         })
