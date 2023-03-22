@@ -1,4 +1,4 @@
-const erc20Abi = [
+const ERC20_ABI = [
   {
     "constant": true,
     "inputs": [],
@@ -105,4 +105,4 @@ const erc20Abi = [
     "type": "function"
   }
 ];
-export{erc20Abi};
+export{ERC20_ABI};

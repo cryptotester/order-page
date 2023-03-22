@@ -1,4 +1,4 @@
-let payAbi = [
+const ABI_PAYMENTSPLITTER2 = [
   {
     "anonymous": false,
     "inputs": [
@@ -268,4 +268,4 @@ let payAbi = [
     "type": "function"
   }
 ];
-export{payAbi};
+export{ABI_PAYMENTSPLITTER2};

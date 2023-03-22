@@ -153,6 +153,15 @@ async function handleLowBalance(web3, selectedAccount, expectedAmount, lowBalanc
   return true;
 }
 
+function getSupportedChainNames(CHAIN_INFO, allowOnlyProdChains = false) {
+  let result = [];
+  for (const [k, v] of Object.entries(CHAIN_INFO)) {
+    if (allowOnlyProdChains && v.isTestnet) continue
+    if (v.contractAddress && v.contractAddress != '') result.push(v.name);
+  }
+  return result;
+}
+
 function getParameterByName(name, url = window.location.href) {
   name = name.replace(/[\[\]]/g, '\\$&');
   var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
@@ -175,6 +184,7 @@ export {
   onConnect,
   switchNetwork,
   handleLowBalance,
+  getSupportedChainNames,
   getParameterByName,
   sleep,
 }

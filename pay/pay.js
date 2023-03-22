@@ -1,59 +1,14 @@
-import { payAbi as ABI } from "./pay_abi.js";
-import { erc20Abi as ERC20_ABI } from "./erc20minimal_abi.js";
-import { init, showOrHideError, onConnect, handleLowBalance, switchNetwork, sleep } from "./shared.js";
+import { ABI_PAYMENTSPLITTER2 } from "./abi_paymentSplitter2.js";
+import { ERC20_ABI } from "./abi_erc20.js";
+import { CHAIN_INFO } from "./chainInfo.js";
+import { init, showOrHideError, onConnect, handleLowBalance, switchNetwork, sleep, getSupportedChainNames } from "./shared.js";
+
+const IS_PROD = false; // false = TESTNET, true = PROD
 
 // paymentSplitter PROJECT_ID to use, every project gets a different PROJECT_ID don't just reuse 0 all the time, ask the smart contract dev or the project manager which PROJECT_ID to use
 const PROJECT_ID = 0;
-// const mandatoryChainId = 250; // for Teens on Acid, the mandatory chain is 250
-const mandatoryChainId = 4002; // for Teens on Acid, the mandatory chain is 250, 4002 for testing on testnet
 
-const chainInfo = {
-  4002: {
-    name: "Fantom Testnet",
-    explorerUrl: "https://testnet.ftmscan.com",
-    contractAddress: "0xfb0F0069D94a491A2a312DDAdc717d9bbC1a5a98", // paymentSplitter2 smart contract address
-    currencies: {
-      "NATIVE": {
-        symbol: "FTM",
-        fallbackRate: 0.5,
-        priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=FTMUSDT",
-      },
-      "TC":  {
-        fallbackRate: 1.3,
-        address: "0x19EA0fE857b4f007fAD4A58c23737390F6DDc861",
-        decimals: 18,
-        priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=MATICUSDT",
-      },
-      "USD":  {
-        fallbackRate: 1,
-        address: "0xa70049260772E13dfFaC2aF8445159595fdf4C98",
-        decimals: 6,
-      }
-    },
-    250: {
-      name: "Fantom Opera",
-      explorerUrl: "https://ftmscan.com",
-      contractAddress: "", // paymentSplitter2 smart contract address
-      currencies: {
-        "NATIVE": {
-          symbol: "FTM",
-          fallbackRate: 0.5,
-          priceApiUrl: "https://api.binance.com/api/v3/ticker/price?symbol=FTMUSDT",
-        },
-        "USDC":  {
-          fallbackRate: 1,
-          address: "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",
-          decimals: 6,
-        },
-        "USDT":  {
-          fallbackRate: 1,
-          address: "0x049d68029688eabf473097a2fc38ef61633a3c7a",
-          decimals: 6,
-        }
-      }
-    }
-  }
-}
+const SWITCH_TO_CHAIN_ID = IS_PROD ? 240 : 4002;
 
 const Web3 = window.Web3;
 
@@ -63,22 +18,25 @@ async function fetchAccountData() {
   showOrHideError();
 
   web3 = new Web3(window.provider);
-  // console.log("Web3 instance is", web3);
 
-  await switchNetwork(web3, mandatoryChainId);
-  // console.log('Switched network');
+  if (SWITCH_TO_CHAIN_ID) await switchNetwork(web3, SWITCH_TO_CHAIN_ID);
+  
   chainId = await web3.eth.getChainId();
 
-  // console.log('contract address', chainInfo[chainId]);
-  contractAddress = chainInfo[chainId]?.contractAddress;
+  contractAddress = CHAIN_INFO[chainId]?.contractAddress;
   if (contractAddress != undefined) {
-    contract = await new web3.eth.Contract(ABI, contractAddress);
-    // console.log(contract);
+    contract = await new web3.eth.Contract(ABI_PAYMENTSPLITTER2, contractAddress);
     document.querySelector("#prepare").style.display = "none";
     document.querySelector("#connected").style.display = "block";    
   } else {
-    // showOrHideError('Please connect to one of our supported chains: Fantom Opera (more chains to be added)');
-    showOrHideError('Please connect to Fantom TESTNET');
+    let chainMessage;
+    if (SWITCH_TO_CHAIN_ID) {
+      chainMessage = `Please connect to ${CHAIN_INFO[SWITCH_TO_CHAIN_ID].name}`;
+    } else {
+      let supportedChainNames = getSupportedChainNames(CHAIN_INFO, IS_PROD);
+      chainMessage = `Please connect to one of our supported chains: ${supportedChainNames.join(', ')}`
+    }
+    showOrHideError(chainMessage);
     return;
   }
 
@@ -90,19 +48,19 @@ async function fetchAccountData() {
   // });
 
   const accounts = await web3.eth.getAccounts();
-  // console.log("Got accounts", accounts);
   selectedAccount = accounts[0];
 
-  let walletAddress = selectedCoin;
+  // TODO: walletAddress hardcoded only for testing. Comment on PROD!
+  let walletAddress = '0x30b2c8c593944b6bdb58aca704545747dfc11c56'; // 37 
+  // TODO: uncomment the following line on PROD
+  // let walletAddress = selectedCoin;
   const ownedNftsQuery = `https://api.binarypunks.com/nfts.php?wallet=${walletAddress}`;
   const ownedNfts = await axios.get(ownedNftsQuery)
     .then(response => {
-      // console.log('Axios got a response...');console.log(response);
       return response.data;
     })
     .catch(error => {
       console.log(error);
-      // Use fallback rate in case of error
       return [];
     });
   console.log('Owned NFTs', ownedNfts);
@@ -125,13 +83,11 @@ async function fetchAccountData() {
         result.image = metadata.image.replace('ipfs://', ipfsCacheUrl);
       } else {
         // no image
-        // console.log(x);
         // TODO: use a default image?
       }
     } else {
       // no metadata
       result.name = result.name || `${x.name} #${x.token_id}`;
-      // console.log(x);
     }
     // console.log(result);
     return result;
@@ -150,19 +106,17 @@ async function getTokenContract(tokenAddress) {
 
 async function getRate(symbol) {
   symbol = symbol.toUpperCase();
-  let priceApiUrl = chainInfo[chainId].currencies[symbol].priceApiUrl;
-  let fallbackRate = chainInfo[chainId].currencies[symbol].fallbackRate;
+  let priceApiUrl = CHAIN_INFO[chainId].currencies[symbol].priceApiUrl;
+  let fallbackRate = CHAIN_INFO[chainId].currencies[symbol].fallbackRate;
   
   if (priceApiUrl) {
     // Get e.g. {"symbol":"MATICUSDT","price":"1.18180000"}
     const binanceRate = await axios.get(priceApiUrl)
       .then(response => {
-        // console.log('Axios got a response...');console.log(response);
         return response.data;
       })
       .catch(error => {
         console.log(error);
-        // Use fallback rate in case of error
         return { price: fallbackRate }
       });
     return parseFloat(binanceRate.price);
@@ -176,21 +130,20 @@ async function pay() {
   try {
     const BN = web3.utils.toBN;
 
-    let subtotal = $("#subtotal").val();
+    let total = $("#total").val();
     let selectedCoin = $('input[name="coin"]:checked').val();
     selectedCoin = selectedCoin.toUpperCase();
-    let symbol = selectedCoin == 'NATIVE' ? chainInfo[chainId].currencies['NATIVE'].symbol : selectedCoin;
+    let symbol = selectedCoin == 'NATIVE' ? CHAIN_INFO[chainId].currencies['NATIVE'].symbol : selectedCoin;
     console.log('Selected payment:', symbol);
 
     let rate = await getRate(selectedCoin);
-    // console.log(rate);
 
     let lowBalanceMessage = `You don't have enough balance. You need [AMOUNT].`;
     let paymentReceipt;
     if (selectedCoin == 'NATIVE') {
       console.log(`Initiating native coin payment`);
       
-      let totalValue = BN(1e18 * parseFloat(subtotal) / rate); // Get the price in wei (amount of native coin * 1e18)
+      let totalValue = BN(1e18 * parseFloat(total) / rate); // Get the price in wei (amount of native coin * 1e18)
       console.log(`totalValue ${totalValue}`);
       let humanFriendlyAmount = web3.utils.fromWei(totalValue.toString());
       console.log('Total Value:', totalValue.toString(), 'Human friendly:', humanFriendlyAmount);
@@ -220,11 +173,11 @@ async function pay() {
       // ERC20 token payment, e.g. USDC or any other token
       console.log(`Initiating ERC-20 token payment`);
       
-      const token = chainInfo[chainId].currencies[selectedCoin];
+      const token = CHAIN_INFO[chainId].currencies[selectedCoin];
       const tokenContract = await getTokenContract(token.address);
       let multiplier = 10**token.decimals; // Use the proper token decimals (not only 18, USDC e.g. has only 6)
 
-      let totalValue = BN(multiplier * parseFloat(subtotal) / rate);
+      let totalValue = BN(multiplier * parseFloat(total) / rate);
       let humanFriendlyAmount = parseFloat(totalValue) / parseFloat(multiplier);
       console.log('Total Value:', totalValue.toString(), 'Human friendly:', humanFriendlyAmount);
 
@@ -250,10 +203,8 @@ async function pay() {
         let approveResult = await tokenContract.methods.approve(contractAddress, totalValue.toString()).send({ from: selectedAccount })
           .catch(x => {
             error = x;
-            // console.log(x.message)
           })
           .then(x => { 
-            // console.log(x);
             return x;
           });
 
@@ -268,10 +219,8 @@ async function pay() {
       paymentReceipt = await contract.methods.splitTokenPayment(PROJECT_ID, token.address, totalValue.toString()).send({ from: selectedAccount })
         .catch(x => {
           error = x;
-          // console.log(x.message)
         })
         .then(x => { 
-          // console.log(x);
           return x;
         });
     } // End payment block
@@ -279,7 +228,7 @@ async function pay() {
     if (paymentReceipt) {
       // Payment OK
       console.log(paymentReceipt);
-      let transactionUrl = `${chainInfo[chainId].explorerUrl}/tx/${paymentReceipt.transactionHash}`;
+      let transactionUrl = `${CHAIN_INFO[chainId].explorerUrl}/tx/${paymentReceipt.transactionHash}`;
       // TODO: after payment, if you need to call a javascript function to show a success page etc., put it here
       console.log(`THANK YOU. Transaction`, transactionUrl);
     }
@@ -308,7 +257,6 @@ function interactionDone() {
 
 window.addEventListener('load', async () => {
   init();
-  // updateMintInfo(chainId, ABI, CONTRACT_ADDRESS);
   document.querySelector("#btn-connect").addEventListener("click", async () => {
     await onConnect(fetchAccountData);
   });
