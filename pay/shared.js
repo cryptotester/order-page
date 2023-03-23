@@ -111,8 +111,8 @@ async function switchNetwork(web3, chainId) {
   let currentChainId = await web3.eth.getChainId();
   if (currentChainId != chainId) {
     console.log('currentChainId & chainId to switch to:', currentChainId, chainId);
+    let networkName = CHAIN[chainId].name;
     try {
-      let networkName = CHAIN[chainId].name;
       console.log(`Trying to switch to ${networkName} (${chainId})`);
       await web3.currentProvider.request({
         method: "wallet_switchEthereumChain",
